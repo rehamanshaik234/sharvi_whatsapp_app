@@ -25,6 +25,7 @@ const PASSWORD = "Vision@2025";
 // const authToken = "4c4703bdcb61014e10ee21bacacbf8a1";
 // const authToken = "4c63201ff48d98a69e425c694be3408f";
 const twilioConfig = JSON.parse(process.env.TWILIO_JSON);
+console.log(twilioConfig);
 const twilioClient = twilio(twilioConfig.accountSid, twilioConfig.authToken);
 
 

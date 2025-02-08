@@ -20,12 +20,12 @@ const SAP_API_URL = "https://49.207.9.62:44325/pr/release?sap-client=100";
 const USERNAME = "s23hana3";
 const PASSWORD = "Vision@2025";
 
-
-const accountSid = "AC46614487d4b0f2e9e7f9b7f20de1673e";
-// const accountSid ="AC18ae6e19cc87ab473e00a0b0c235e0fb"
-const authToken = "4c4703bdcb61014e10ee21bacacbf8a1";
+// const accountSid = "AC46614487d4b0f2e9e7f9b7f20de1673e";
+// // const accountSid ="AC18ae6e19cc87ab473e00a0b0c235e0fb"
+// const authToken = "4c4703bdcb61014e10ee21bacacbf8a1";
 // const authToken = "4c63201ff48d98a69e425c694be3408f";
-const twilioClient = twilio(accountSid, authToken);
+const twilioConfig = JSON.parse(process.env.TWILIO_JSON);
+const twilioClient = twilio(twilioConfig.accountSid, twilioConfig.authToken);
 
 
 const userData = {};

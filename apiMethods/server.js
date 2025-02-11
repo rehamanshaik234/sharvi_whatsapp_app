@@ -6,6 +6,8 @@ const bodyParser = require("body-parser");
 const twilio = require("twilio");
 const https = require("https");
 const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
 
 const agent = new https.Agent({
   rejectUnauthorized: false, 
@@ -18,12 +20,11 @@ const PORT = process.env.PORT || 3000;
 const SAP_API_URL = "https://49.207.9.62:44325/pr/release?sap-client=100";
 // const SAP_API_URL = 'http://10.10.6.113:8000/smart_app/pr_rel/release?sap-client=234'
 const USERNAME = "s23hana3";
+// const PASSWORD = "Best@12345";
 const PASSWORD = "Vision@2025";
 
-// const accountSid = "AC46614487d4b0f2e9e7f9b7f20de1673e";
-// // const accountSid ="AC18ae6e19cc87ab473e00a0b0c235e0fb"
-// const authToken = "4c4703bdcb61014e10ee21bacacbf8a1";
-// const authToken = "4c63201ff48d98a69e425c694be3408f";
+
+
 const twilioConfig = JSON.parse(process.env.TWILIO_JSON);
 console.log(twilioConfig);
 const twilioClient = twilio(twilioConfig.accountSid, twilioConfig.authToken);
@@ -37,6 +38,7 @@ function getAuthHeader() {
 
 app.get("/", (req, res) => {
   res.send({ message: "Welcome to Twilio WhatsApp Automation!" });
+  this.sendInitialNotification();
 });
 
 const sentBANFNs = new Set();
@@ -112,37 +114,75 @@ function convertSapData(records) {
 
   return records.map((item) => {
     const formattedItem = {};
+
     for (const key in item) {
       if (fieldMapping[key]) {
-        formattedItem[fieldMapping[key]] = item[key];
+        if (key === "BANFN") {
+          // Make PR Number a clickable link
+          formattedItem[fieldMapping[key]] = `https://sharvi-whatsapp-app.onrender.com/api/get/PRFile?BANFN=${item[key]}`;
+        } else {
+          formattedItem[fieldMapping[key]] = item[key];
+        }
       }
     }
+
     return formattedItem;
   });
 }
 
+
+// async function sendWhatsAppNotification(data) {
+//   const messageBody = JSON.stringify(data, null, 2);
+//   const toWhatsAppNumber = "whatsapp:+919553142292";
+//   const fromWhatsAppNumber = "whatsapp:+14155238886";
+
+//   const MAX_LENGTH = 1600;
+//   const messages = chunkString(messageBody, MAX_LENGTH);
+
+//   for (const message of messages) {
+//     try {
+//       const response = await twilioClient.messages.create({
+//         from: fromWhatsAppNumber,
+//         to: toWhatsAppNumber,
+//         body: message,
+//       });
+//       console.log("Notification Sent:", response.sid);
+//     } catch (error) {
+//       throw new Error(`Failed to send WhatsApp notification: ${error.message}`);
+//     }
+//   }
+// }
+
 async function sendWhatsAppNotification(data) {
-  console.log("enter into what",data)
-  const messageBody = JSON.stringify(data, null, 2);
-  const toWhatsAppNumber = "whatsapp:+918897646530";
+  const toWhatsAppNumber = "whatsapp:+919553142292";
   const fromWhatsAppNumber = "whatsapp:+14155238886";
 
-  const MAX_LENGTH = 1600;
-  const messages = chunkString(messageBody, MAX_LENGTH);
-
-  for (const message of messages) {
+  for (const record of data) {
     try {
+      const messageBody = Object.entries(record)
+        .map(([key, value]) => {
+          if (key === "PR Number") {
+            return `*${key}:* ${value}`; // PR Number as a raw URL (clickable)
+          }
+          return `*${key}:* ${value}`;
+        })
+        .join("\n");
+
       const response = await twilioClient.messages.create({
         from: fromWhatsAppNumber,
         to: toWhatsAppNumber,
-        body: message,
+        body: messageBody, // Message with clickable PR Number
       });
+
       console.log("Notification Sent:", response.sid);
     } catch (error) {
-      throw new Error(`Failed to send WhatsApp notification: ${error.message}`);
+      console.error(`Failed to send WhatsApp notification: ${error.message}`);
     }
   }
 }
+
+
+
 
 function chunkString(str, length) {
   const chunks = [];
@@ -154,6 +194,46 @@ function chunkString(str, length) {
 
 
 setInterval(sendInitialNotification, 60000);
+
+
+
+app.get("/api/get/PRFile", async (req, res) => {
+  try {
+    const { BANFN } = req.query; // Get PR Number from query params
+    if (!BANFN) {
+      return res.status(400).send("BANFN is required");
+    }
+
+    // Call SAP API to get base64 data
+    const sapResponse = await axios.put(SAP_API_URL, { BANFN }, {
+      headers: {
+        Authorization: getAuthHeader(),
+        "Content-Type": "application/json",
+      },
+      httpsAgent: agent,
+    });
+
+    console.log("SAP Response Received");
+
+    const base64Data = sapResponse.data.fileBase64;
+    if (!base64Data) {
+      return res.status(400).send("No file data received from SAP.");
+    }
+
+    const fileBuffer = Buffer.from(base64Data, "base64");
+
+    res.setHeader("Content-Disposition", `attachment; filename=PR_${BANFN}.pdf`);
+    res.setHeader("Content-Type", "application/pdf");
+
+    // Send file as response
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error("Error:", error.message);
+    res.status(500).send("Failed to fetch file from SAP.");
+  }
+});
+
+
 app.post("/api/whatsappWebhook", async (req, res) => {
   try {
     const { From, Body } = req.body; 
@@ -165,11 +245,11 @@ app.post("/api/whatsappWebhook", async (req, res) => {
       RELEASE: {
         BANFN, 
         BNFPO: parseInt(BNFPO, 10), 
-        ZMAIL:''
+        ZMAIL:""
       },
     };
 
-    console.log("SAP Payload:", sapPayload);
+    // console.log("SAP Payload:", sapPayload);
     const sapResponse = await axios.post(SAP_API_URL, sapPayload, {
       headers: {
         Authorization: getAuthHeader(),
@@ -185,7 +265,7 @@ app.post("/api/whatsappWebhook", async (req, res) => {
 
     const twilioResponse = await twilioClient.messages.create({
       from: "whatsapp:+14155238886", // Twilio WhatsApp number
-      to: "whatsapp:+918897646530", 
+      to: "whatsapp:+919553142292", 
       body: message,
     });
   

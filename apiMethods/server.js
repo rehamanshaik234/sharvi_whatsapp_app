@@ -215,7 +215,7 @@ app.get("/api/get/PRFile", async (req, res) => {
 
     console.log("SAP Response Received");
 
-    const base64Data = sapResponse.data.fileBase64;
+    const base64Data = sapResponse.data;
     if (!base64Data) {
       return res.status(400).send("No file data received from SAP.");
     }
